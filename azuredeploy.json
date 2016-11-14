@@ -12,14 +12,17 @@
     },
     "rmm31Name": {
       "type": "string",
-      "minLength": 1
+      "minLength": 1,
+      "defaultValue": "rmm31"
     },
     "rmm31AdminUserName": {
       "type": "string",
-      "minLength": 1
+      "minLength": 1,
+      "defaultValue": "advantech"
     },
     "rmm31AdminPassword": {
-      "type": "securestring"
+      "type": "securestring",
+      "defaultValue": "P@ssw0rd123456"
     }
   },
   "variables": {
