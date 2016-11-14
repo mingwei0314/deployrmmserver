@@ -1,0 +1,226 @@
+{
+  "$schema": "https://schema.management.azure.com/schemas/2015-01-01/deploymentTemplate.json#",
+  "contentVersion": "1.0.0.0",
+  "parameters": {
+    "rmm31Type": {
+      "type": "string",
+      "defaultValue": "Standard_LRS",
+      "allowedValues": [
+        "Standard_LRS",
+        "Premium_LRS"
+      ]
+    },
+    "rmm31Name": {
+      "type": "string",
+      "minLength": 1,
+      "defaultValue": "rmm31"
+    },
+    "rmm31AdminUserName": {
+      "type": "string",
+      "minLength": 1,
+      "defaultValue": "advantech"
+    },
+    "rmm31AdminPassword": {
+      "type": "securestring",
+      "defaultValue": "P@ssw0rd123456"
+    },
+    "rmm31resourceGroupName": {
+      "type": "string",
+      "minLength": 1
+    }
+  },
+  "variables": {
+    "rmm31NsgName": "advantechNsg",
+    "rmm31vnetPrefix": "10.0.0.0/16",
+    "rmm31vnetSubnet1Name": "Subnet",
+    "rmm31vnetSubnet1Prefix": "10.0.0.0/24",
+    "rmm31Name": "[concat('rmm31', uniqueString(resourceGroup().id))]",
+    "rmm31OSDiskName": "rmm31OSDisk",
+    "rmm31VmSize": "Standard_A3",
+    "rmm31VnetID": "[resourceId('Microsoft.Network/virtualNetworks', 'rmm31vnet')]",
+    "rmm31SubnetRef": "[concat(variables('rmm31VnetID'), '/subnets/', variables('rmm31vnetSubnet1Name'))]",
+    "rmm31StorageAccountContainerName": "vhds",
+    "rmm31NicName": "[concat(parameters('rmm31Name'), 'NetworkInterface')]",
+    "rmm31PipName": "[concat('rmm31', uniqueString(resourceGroup().id))]",
+	"rmm31PipDnsName": "[concat(parameters('rmm31resourceGroupName'), '-rmm31')]"
+  },
+  "resources": [
+    {
+      "apiVersion": "2015-05-01-preview",
+      "type": "Microsoft.Network/networkSecurityGroups",
+      "name": "[variables('rmm31NsgName')]",
+      "location": "[resourceGroup().location]",
+      "properties": {
+        "securityRules": [
+          {
+            "name": "rdp_rule",
+            "properties": {
+              "description": "Allow RDP",
+              "protocol": "Tcp",
+              "sourcePortRange": "*",
+              "destinationPortRange": "3389",
+              "sourceAddressPrefix": "Internet",
+              "destinationAddressPrefix": "*",
+              "access": "Allow",
+              "priority": 100,
+              "direction": "Inbound"
+            }
+          },
+          {
+            "name": "web_rule",
+            "properties": {
+              "description": "Allow WEB",
+              "protocol": "Tcp",
+              "sourcePortRange": "*",
+              "destinationPortRange": "80",
+              "sourceAddressPrefix": "Internet",
+              "destinationAddressPrefix": "*",
+              "access": "Allow",
+              "priority": 101,
+              "direction": "Inbound"
+            }
+          }
+        ]
+      }
+    },
+    {
+      "name": "rmm31vnet",
+      "type": "Microsoft.Network/virtualNetworks",
+      "location": "[resourceGroup().location]",
+      "apiVersion": "2015-05-01-preview",
+      "dependsOn": [
+        "[concat('Microsoft.Network/networkSecurityGroups/', variables('rmm31NsgName'))]"
+      ],
+   
+      "tags": {
+        "displayName": "rmm31vnet"
+      },
+      "properties": {
+        "addressSpace": {
+          "addressPrefixes": [
+            "[variables('rmm31vnetPrefix')]"
+          ]
+        },
+        "subnets": [
+          {
+            "name": "[variables('rmm31vnetSubnet1Name')]",
+            "properties": {
+              "addressPrefix": "[variables('rmm31vnetSubnet1Prefix')]"
+            }
+          }
+        ]
+      }
+    },
+    {
+      "name": "[variables('rmm31Name')]",
+      "type": "Microsoft.Storage/storageAccounts",
+      "location": "[resourceGroup().location]",
+      "apiVersion": "2015-05-01-preview",
+      "dependsOn": [ ],
+      "tags": {
+        "displayName": "rmm31"
+      },
+      "properties": {
+        "accountType": "[parameters('rmm31Type')]"
+      }
+    },
+    {
+      "name": "[variables('rmm31NicName')]",
+      "type": "Microsoft.Network/networkInterfaces",
+      "location": "[resourceGroup().location]",
+      "apiVersion": "2015-05-01-preview",
+      "dependsOn": [
+        "[concat('Microsoft.Network/virtualNetworks/', 'rmm31vnet')]",
+        "[concat('Microsoft.Network/publicIPAddresses/', variables('rmm31PipName'))]"
+      ],
+      "tags": {
+        "displayName": "rmm31Nic"
+      },
+      "properties": {
+        "ipConfigurations": [
+          {
+            "name": "ipconfig1",
+            "properties": {
+              "privateIPAllocationMethod": "Dynamic",
+              "subnet": {
+                "id": "[variables('rmm31SubnetRef')]"
+              },
+              "publicIPAddress": {
+                "id": "[resourceId('Microsoft.Network/publicIPAddresses', variables('rmm31PipName'))]"
+              }
+            }
+          }
+        ]
+      }
+    },
+    {
+      "name": "[parameters('rmm31Name')]",
+      "type": "Microsoft.Compute/virtualMachines",
+      "location": "[resourceGroup().location]",
+      "apiVersion": "2015-05-01-preview",
+      "dependsOn": [
+        "[concat('Microsoft.Storage/storageAccounts/', variables('rmm31Name'))]",
+        "[concat('Microsoft.Network/networkInterfaces/', variables('rmm31NicName'))]"
+      ],
+      "tags": {
+        "displayName": "rmm31"
+      },
+      "plan": {
+                "name": "standard",
+                "product": "rmm31_for_windows",
+                "publisher": "advantech"
+      },
+      "properties": {
+        "hardwareProfile": {
+          "vmSize": "[variables('rmm31VmSize')]"
+        },
+        "osProfile": {
+          "computerName": "[parameters('rmm31Name')]",
+          "adminUsername": "[parameters('rmm31AdminUsername')]",
+          "adminPassword": "[parameters('rmm31AdminPassword')]"
+        },        
+        "storageProfile": {
+          "imageReference": {
+            "publisher": "advantech",
+            "offer": "rmm31_for_windows",
+            "sku": "standard",
+            "version": "latest"
+          },
+          "osDisk": {
+            "name": "rmm31OSDisk",
+            "vhd": {
+              "uri": "[concat('http://', variables('rmm31Name'), '.blob.core.windows.net/', variables('rmm31StorageAccountContainerName'), '/', variables('rmm31OSDiskName'), '.vhd')]"
+            },
+            "caching": "ReadWrite",
+            "createOption": "FromImage"
+          }
+        },
+        "networkProfile": {
+          "networkInterfaces": [
+            {
+              "id": "[resourceId('Microsoft.Network/networkInterfaces', variables('rmm31NicName'))]"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "name": "[variables('rmm31PipName')]",
+      "type": "Microsoft.Network/publicIPAddresses",
+      "location": "[resourceGroup().location]",
+      "apiVersion": "2015-05-01-preview",
+      "dependsOn": [ ],
+      "tags": {
+        "displayName": "rmm31Pip"
+      },
+      "properties": {
+        "publicIPAllocationMethod": "Dynamic",
+        "dnsSettings": {
+          "domainNameLabel": "[variables('rmm31PipDnsName')]"
+        }
+      }
+    }
+  ],
+  "outputs": {
+  }
+}
